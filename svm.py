@@ -1,85 +1,62 @@
-import numpy as np
 import pandas as pd
-from sklearn.pipeline import Pipeline
-from sklearn.compose import ColumnTransformer
+import numpy as np
 from sklearn.impute import SimpleImputer
-from sklearn.preprocessing import StandardScaler, OneHotEncoder
-from sklearn.feature_selection import SelectKBest, chi2
-from sklearn.ensemble import IsolationForest
-from sklearn.svm import SVC
 from sklearn.model_selection import train_test_split, GridSearchCV
-from sklearn.metrics import classification_report
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.ensemble import RandomForestClassifier
 
 # Cargar datos
 file_path = r"C:\Users\ROG STRIX\Documents\cirrhosis.csv"
 df = pd.read_csv(file_path)
 
-# Verificar y manejar datos faltantes
+# Imputar valores faltantes
+imputer_numeric = SimpleImputer(strategy='mean')
 numeric_features = df.select_dtypes(include=['int64', 'float64']).columns
+df[numeric_features] = imputer_numeric.fit_transform(df[numeric_features])
+
+imputer_categorical = SimpleImputer(strategy='most_frequent')
 categorical_features = df.select_dtypes(include=['object']).columns
+df[categorical_features] = imputer_categorical.fit_transform(df[categorical_features])
 
-numeric_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='mean')),
-    ('scaler', StandardScaler())
-])
+# Codificación de variables categóricas
+df_encoded = pd.get_dummies(df)
 
-categorical_transformer = Pipeline(steps=[
-    ('imputer', SimpleImputer(strategy='constant', fill_value='missing')),
-    ('onehot', OneHotEncoder(handle_unknown='ignore'))
-])
+# Imprime las columnas para verificar la correcta
+print("Columnas en DataFrame codificado:", df_encoded.columns.tolist())
 
-preprocessor = ColumnTransformer(
-    transformers=[
-        ('num', numeric_transformer, numeric_features),
-        ('cat', categorical_transformer, categorical_features)
-    ])
+# Identifica la columna objetivo correcta, ajustando si es necesario
+target_column = 'Status_C'  # Ajusta según los nombres de columna impresos
 
-# Detectar y manejar outliers
-def remove_outliers(X, y):
-    iso_forest = IsolationForest(contamination=0.05)
-    yhat = iso_forest.fit_predict(X)
-    mask = yhat != -1
-    return X[mask], y[mask]
+if target_column not in df_encoded.columns:
+    raise ValueError(f"Columna {target_column} no encontrada. Verifica los nombres de las columnas.")
 
-# Asumo que 'Status' es tu variable objetivo
-X = df.drop('Status', axis=1)  # Cambia 'Status' al nombre real de tu columna objetivo si es diferente
-y = df['Status']  # Cambia 'Status' al nombre real de tu columna objetivo si es diferente
+X = df_encoded.drop(target_column, axis=1)
+y = df_encoded[target_column].astype(int)
 
-# Aplicar preprocesamiento
-X_processed = preprocessor.fit_transform(X)
+# Selección de características usando RandomForest
+rf_model = RandomForestClassifier(random_state=42)
+rf_model.fit(X, y)
+important_features = X.columns[rf_model.feature_importances_ > np.median(rf_model.feature_importances_)]
 
-# Remover outliers
-X_processed, y = remove_outliers(X_processed, y)
+# División del dataset
+X_train, X_test, y_train, y_test = train_test_split(X[important_features], y, test_size=0.2, random_state=42)
 
-# Selección de variables
-feature_selector = SelectKBest(score_func=chi2, k=10)
-
-# Pipeline final
-pipeline = Pipeline(steps=[
-    ('preprocessor', preprocessor),
-    ('feature_selection', feature_selector),
-    ('classifier', SVC())
-])
-
-# División de datos
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# Búsqueda de hiperparámetros
+# Configuración de la búsqueda de hiperparámetros
 param_grid = {
-    'classifier__C': [0.1, 1, 10, 100],
-    'classifier__gamma': [1, 0.1, 0.01, 0.001],
-    'classifier__kernel': ['linear', 'rbf']
+    'C': [0.1, 10, 100],
+    'gamma': [1, 0.01],
+    'kernel': ['linear', 'rbf']
 }
-
-grid_search = GridSearchCV(pipeline, param_grid, cv=5, verbose=2, n_jobs=-1)
-
-# Entrenamiento y evaluación
+grid_search = GridSearchCV(SVC(), param_grid, refit=True, verbose=2, cv=5)
 grid_search.fit(X_train, y_train)
-best_model = grid_search.best_estimator_
-y_pred = best_model.predict(X_test)
 
-print("Mejores hiperparámetros:")
-print(grid_search.best_params_)
+# Evaluación del modelo
+y_pred = grid_search.predict(X_test)
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred, average='macro')
+recall = recall_score(y_test, y_pred, average='macro')
+f1 = f1_score(y_test, y_pred, average='macro')
 
-print("\nReporte de clasificación:")
-print(classification_report(y_test, y_pred))
+print(f"Resultados optimizados: \nPrecisión: {accuracy}\nPrecision: {precision}\nRecall: {recall}\nF1 Score: {f1}")
+print("Mejores hiperparámetros:", grid_search.best_params_)
