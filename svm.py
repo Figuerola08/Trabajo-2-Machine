@@ -47,8 +47,7 @@ if 'Status' not in df_encoded.columns:
 target_column = 'Status'
 
 # Eliminar características altamente correlacionadas con la columna objetivo que podrían causar fuga de datos
-potential_leakage_features = []  # Añadir otras características si es necesario
-X = df_encoded.drop(columns=potential_leakage_features + [target_column])
+X = df_encoded.drop(columns=target_column)
 y = df_encoded[target_column].astype(int)
 
 # Verificar el balance de clases

@@ -43,7 +43,7 @@ df_encoded['Status'] = status
 if 'Status' not in df_encoded.columns:
     raise KeyError("La columna 'Status' no se encuentra en el DataFrame después de la codificación. Verifica el nombre de la columna en el archivo CSV.")
 
-# Asumiendo que 'Status' es la variable objetivo
+# 'Status' es la variable objetivo
 X = df_encoded.drop(['Status'], axis=1)
 y = df_encoded['Status']
 
